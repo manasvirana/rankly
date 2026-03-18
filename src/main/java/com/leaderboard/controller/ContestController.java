@@ -9,12 +9,12 @@ import com.leaderboard.service.RedisLeaderboardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,6 +28,7 @@ public class ContestController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<Contest> createContest(@Valid @RequestBody Requests.CreateContest request) {
         Contest contest = Contest.builder()
                 .name(request.getName())
@@ -52,9 +53,9 @@ public class ContestController {
     }
 
     @PostMapping("/{id}/end")
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<Contest> endContest(@PathVariable UUID id) {
         String contestId = id.toString();
-
         return contestRepository.endContest(id)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Contest not found")))
                 .flatMap(contest ->
