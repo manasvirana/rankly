@@ -6,8 +6,8 @@ import com.leaderboard.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -17,13 +17,14 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
-    public Mono<AuthResponse> register(@Valid @RequestBody AuthRequests.Register request) {
-        return authService.register(request);
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody AuthRequests.Register request) {
+        AuthResponse response = authService.register(request).block();
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
-    public Mono<AuthResponse> login(@Valid @RequestBody AuthRequests.Login request) {
-        return authService.login(request);
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequests.Login request) {
+        AuthResponse response = authService.login(request).block();
+        return ResponseEntity.ok(response);
     }
 }
