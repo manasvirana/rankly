@@ -33,24 +33,7 @@ public class JwtService {
                 .compact();
     }
 
-    public String extractUsername(String token) {
-        return extractClaims(token).getSubject();
-    }
-
-    public String extractRole(String token) {
-        return extractClaims(token).get("role", String.class);
-    }
-
-    public boolean isTokenValid(String token) {
-        try {
-            extractClaims(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private Claims extractClaims(String token) {
+    public Claims parse(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(signingKey)
                 .build()

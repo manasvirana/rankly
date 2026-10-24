@@ -1,5 +1,6 @@
 package com.leaderboard.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,6 +10,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalErrorHandler {
 
@@ -38,6 +40,7 @@ public class GlobalErrorHandler {
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<Map<String, Object>>> handleGeneral(Exception ex) {
+        log.error("Unhandled exception", ex);
         return Mono.just(ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(errorBody("Something went wrong", 500)));

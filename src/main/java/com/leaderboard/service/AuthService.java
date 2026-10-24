@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 
@@ -27,10 +28,13 @@ public class AuthService {
                     if (exists) return Mono.error(
                             new IllegalArgumentException("Username already taken"));
 
+                    return hashPassword(request.getPassword());
+                })
+                .flatMap(passwordHash -> {
                     User user = User.builder()
                             .username(request.getUsername())
                             .email(request.getEmail())
-                            .password(passwordEncoder.encode(request.getPassword()))
+                            .password(passwordHash)
                             .role("USER")
                             .createdAt(Instant.now())
                             .build();
@@ -52,18 +56,29 @@ public class AuthService {
         return userRepository.findByUsername(request.getUsername())
                 .switchIfEmpty(Mono.error(
                         new IllegalArgumentException("Invalid username or password")))
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-                        return Mono.error(
-                                new IllegalArgumentException("Invalid username or password"));
-                    }
-                    String token = jwtService.generateToken(user.getUsername(), user.getRole());
-                    return Mono.just(new AuthResponse(
-                            token,
-                            user.getId().toString(),
-                            user.getUsername(),
-                            user.getRole()
-                    ));
-                });
+                .flatMap(user -> verifyPassword(request.getPassword(), user.getPassword())
+                        .flatMap(matches -> {
+                            if (!matches) {
+                                return Mono.error(
+                                        new IllegalArgumentException("Invalid username or password"));
+                            }
+                            String token = jwtService.generateToken(user.getUsername(), user.getRole());
+                            return Mono.just(new AuthResponse(
+                                    token,
+                                    user.getId().toString(),
+                                    user.getUsername(),
+                                    user.getRole()
+                            ));
+                        }));
+    }
+
+    private Mono<String> hashPassword(String rawPassword) {
+        return Mono.fromCallable(() -> passwordEncoder.encode(rawPassword))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<Boolean> verifyPassword(String rawPassword, String passwordHash) {
+        return Mono.fromCallable(() -> passwordEncoder.matches(rawPassword, passwordHash))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 }
