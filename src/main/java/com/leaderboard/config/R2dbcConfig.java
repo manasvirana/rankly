@@ -1,27 +1,15 @@
 package com.leaderboard.config;
 
-import io.r2dbc.postgresql.PostgresqlConnectionConfiguration;
-import io.r2dbc.postgresql.PostgresqlConnectionFactory;
-import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Option;
+import org.springframework.boot.autoconfigure.r2dbc.ConnectionFactoryOptionsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.r2dbc.config.AbstractR2dbcConfiguration;
 
 @Configuration
-public class R2dbcConfig extends AbstractR2dbcConfiguration {
+public class R2dbcConfig {
 
-    @Override
     @Bean
-    public ConnectionFactory connectionFactory() {
-        return new PostgresqlConnectionFactory(
-                PostgresqlConnectionConfiguration.builder()
-                        .host("localhost")
-                        .port(5432)
-                        .database("leaderboard")
-                        .username("admin")
-                        .password("admin123")
-                        .timeZone("UTC")
-                        .build()
-        );
+    public ConnectionFactoryOptionsBuilderCustomizer utcTimeZone() {
+        return builder -> builder.option(Option.valueOf("timeZone"), "UTC");
     }
 }

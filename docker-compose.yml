@@ -1,16 +1,14 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
     environment:
       POSTGRES_DB: leaderboard
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
+      POSTGRES_USER: ${DB_USERNAME:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env (see .env.example)}
       PGTZ: UTC
       TZ: UTC
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
 
   redis:
     image: redis:7-alpine

@@ -2,18 +2,19 @@ server:
   port: 8080
 
 spring:
-  r2dbc:
-    url: ${R2DBC_URL:r2dbc:postgresql://localhost:5432/leaderboard}
-    username: ${DB_USERNAME:admin}
-    password: ${DB_PASSWORD:admin123}
+  config:
+    import: optional:file:.env[.properties]
 
-  datasource:
-    url: ${JDBC_URL:jdbc:postgresql://localhost:5432/leaderboard}
+  r2dbc:
+    url: ${R2DBC_URL:r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/leaderboard}
     username: ${DB_USERNAME:admin}
-    password: ${DB_PASSWORD:admin123}
+    password: ${DB_PASSWORD}
 
   flyway:
     enabled: true
+    url: ${JDBC_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/leaderboard}
+    user: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD}
     locations: classpath:db/migration
 
   data:
@@ -27,8 +28,5 @@ leaderboard:
   max-entries: 100
 
 jwt:
-  secret: 3cfa76ef14937c1c0ea519f8fc057a80fcd04a7420f8e8bcd0a7567c272e007b
-  expiration-ms: 86400000
-
-admin:
-  api-key: rankly-admin-2026
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
