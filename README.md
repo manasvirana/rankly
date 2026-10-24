@@ -140,13 +140,13 @@ When a score is submitted to App1:
 git clone https://github.com/manasvirana/rankly.git
 cd rankly
 
+# Create your local config, then set DB_PASSWORD and JWT_SECRET in .env
+cp .env.example .env
+
 # Start Postgres and Redis
 docker compose up -d
 
-# Create tables (first time only)
-docker exec -it rankly-postgres-1 psql -U admin -d leaderboard
-
-# Run the Spring Boot app
+# Run the Spring Boot app (Flyway creates the tables on first start)
 mvn spring-boot:run
 
 # Run the frontend
