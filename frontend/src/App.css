@@ -353,6 +353,8 @@ body {
 
 .my-row td { color: var(--blue) !important; }
 
+.my-rank { display: flex; justify-content: space-between; font-size: 20px; font-weight: 600; color: var(--blue); }
+
 /* PROFILE BADGE */
 .profile-badge {
   display: inline-flex;

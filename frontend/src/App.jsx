@@ -10,6 +10,7 @@ export default function App() {
   const [contests, setContests] = useState([]);
   const [activeContest, setActiveContest] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [myRank, setMyRank] = useState(null);
   const [score, setScore] = useState("");
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -48,10 +49,19 @@ export default function App() {
       } catch { showMessage("Failed to load leaderboard", "error"); }
     };
 
+    const loadMyRank = async () => {
+      try {
+        const res = await fetch(`${API}/contests/${activeContest.id}/rank/${user.userId}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (!stopped) setMyRank(data);
+      } catch { /* the leaderboard still works without the rank card */ }
+    };
+
     const connect = () => {
       ws = new WebSocket(`${WS}/${activeContest.id}`);
-      ws.onopen = () => { delay = 1000; loadLeaderboard(); }; // catch up on missed updates
-      ws.onmessage = (e) => setLeaderboard(JSON.parse(e.data).topEntries);
+      ws.onopen = () => { delay = 1000; loadLeaderboard(); loadMyRank(); }; // catch up on missed updates
+      ws.onmessage = (e) => { setLeaderboard(JSON.parse(e.data).topEntries); loadMyRank(); };
       ws.onclose = () => {
         if (stopped) return;
         retryTimer = setTimeout(connect, delay);
@@ -60,6 +70,7 @@ export default function App() {
     };
 
     loadLeaderboard();
+    loadMyRank();
     connect();
 
     // Runs on leaving the screen or logging out.
@@ -68,7 +79,7 @@ export default function App() {
       clearTimeout(retryTimer);
       ws.close();
     };
-  }, [screen, activeContest]);
+  }, [screen, activeContest, user]);
 
   const showMessage = (text, type = "info") => {
     setMessage({ text, type });
@@ -118,6 +129,7 @@ export default function App() {
 
   const joinContest = (contest) => {
     setLeaderboard([]);
+    setMyRank(null);
     setActiveContest(contest);
     setScreen("contest");
   };
@@ -298,6 +310,22 @@ export default function App() {
             {message.text && <div className={`toast ${message.type}`}>{message.text}</div>}
           </div>
         </div>
+
+        {myRank && (
+          <div className="section">
+            <div className="section-label">Your Rank</div>
+            <div className="card">
+              {myRank.rank === -1 ? (
+                <p className="empty-state">Submit a score to get ranked</p>
+              ) : (
+                <div className="my-rank">
+                  <span>#{myRank.rank}</span>
+                  <span>Score {Math.floor(myRank.score)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="section">
           <div className="section-label">Leaderboard</div>
