@@ -138,6 +138,7 @@ export default function App() {
         return showMessage("Session expired, please log in again", "error");
       }
       const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "Failed to submit score", "error");
       showMessage(`Rank #${data.rank} — Score ${Math.floor(data.score)}`, "success");
       setScore("");
     } catch { showMessage("Failed to submit score", "error"); }
