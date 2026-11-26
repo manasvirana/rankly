@@ -2,7 +2,6 @@ package com.leaderboard.service;
 
 import com.leaderboard.dto.LeaderboardEntry;
 import com.leaderboard.dto.LeaderboardUpdate;
-import com.leaderboard.dto.Requests;
 import com.leaderboard.model.Score;
 import com.leaderboard.repository.ContestRepository;
 import com.leaderboard.repository.ScoreRepository;
@@ -28,9 +27,9 @@ public class ScoreService {
     private final RedisLeaderboardService redisLeaderboard;
     private final LeaderboardBroadcastService broadcastService;
 
-    public Mono<LeaderboardEntry> submitScore(String contestId, Requests.SubmitScore request) {
+    public Mono<LeaderboardEntry> submitScore(String contestId, String userId, Long score) {
         UUID contestUUID = UUID.fromString(contestId);
-        UUID userUUID = UUID.fromString(request.getUserId());
+        UUID userUUID = UUID.fromString(userId);
 
         return contestRepository.findById(contestUUID)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Contest not found: " + contestId)))
@@ -40,9 +39,9 @@ public class ScoreService {
                     }
                     return userRepository.findById(userUUID);
                 })
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("User not found: " + request.getUserId())))
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("User not found: " + userId)))
                 .flatMap(user ->
-                        scoreRepository.upsertScore(userUUID, contestUUID, request.getScore())
+                        scoreRepository.upsertScore(userUUID, contestUUID, score)
                                 .then(scoreRepository.findByUserIdAndContestId(userUUID, contestUUID))
                                 .flatMap(savedScore ->
                                         redisLeaderboard.updateScore(
@@ -79,7 +78,7 @@ public class ScoreService {
                                 )
                 )
                 .doOnSuccess(entry -> log.info("Score submitted: user={}, contest={}, rank={}",
-                        request.getUserId(), contestId, entry.getRank()))
+                        userId, contestId, entry.getRank()))
                 .doOnError(e -> log.error("Score submission failed: {}", e.getMessage()));
     }
 

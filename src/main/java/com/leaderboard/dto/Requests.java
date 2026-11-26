@@ -27,7 +27,6 @@ public class Requests {
 
     @Data
     public static class SubmitScore {
-        @NotNull public String userId;
         @NotNull public Long score;
     }
 }

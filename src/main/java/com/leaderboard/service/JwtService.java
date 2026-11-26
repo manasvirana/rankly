@@ -23,9 +23,9 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(String userId, String role) {
         return Jwts.builder()
-                .setSubject(username)
+                .setSubject(userId)
                 .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expirationMs))

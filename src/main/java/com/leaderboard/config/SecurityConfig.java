@@ -4,6 +4,7 @@ import com.leaderboard.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -48,7 +49,9 @@ public class SecurityConfig {
                         .accessDeniedHandler((exchange, e) ->
                                 writeError(exchange, HttpStatus.FORBIDDEN, "Access denied"))
                 )
-                .authorizeExchange(auth -> auth.anyExchange().permitAll())
+                .authorizeExchange(auth -> auth
+                        .pathMatchers(HttpMethod.POST, "/api/v1/contests/*/scores").authenticated()
+                        .anyExchange().permitAll())
                 .addFilterAt(new JwtAuthFilter(jwtService), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }

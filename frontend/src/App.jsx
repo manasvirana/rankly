@@ -104,8 +104,12 @@ export default function App() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ userId: user.userId, score: parseInt(score) }),
+        body: JSON.stringify({ score: parseInt(score) }),
       });
+      if (res.status === 401) {
+        logout();
+        return showMessage("Session expired, please log in again", "error");
+      }
       const data = await res.json();
       showMessage(`Rank #${data.rank} — Score ${Math.floor(data.score)}`, "success");
       setScore("");

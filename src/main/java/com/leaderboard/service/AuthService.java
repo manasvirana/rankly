@@ -42,7 +42,7 @@ public class AuthService {
                     return userRepository.save(user);
                 })
                 .map(user -> {
-                    String token = jwtService.generateToken(user.getUsername(), user.getRole());
+                    String token = jwtService.generateToken(user.getId().toString(), user.getRole());
                     return new AuthResponse(
                             token,
                             user.getId().toString(),
@@ -62,7 +62,7 @@ public class AuthService {
                                 return Mono.error(
                                         new IllegalArgumentException("Invalid username or password"));
                             }
-                            String token = jwtService.generateToken(user.getUsername(), user.getRole());
+                            String token = jwtService.generateToken(user.getId().toString(), user.getRole());
                             return Mono.just(new AuthResponse(
                                     token,
                                     user.getId().toString(),
