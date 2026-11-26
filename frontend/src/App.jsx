@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 
-const API = "http://localhost:8080/api/v1";
-const WS = "ws://localhost:8080/ws/leaderboard";
+const API = "/api/v1";
+const WS = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws/leaderboard`;
 
 export default function App() {
   const [screen, setScreen] = useState("auth");
@@ -16,7 +16,6 @@ export default function App() {
   const [message, setMessage] = useState({ text: "", type: "" });
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [newContest, setNewContest] = useState({ name: "", description: "", endsAt: "" });
-  const wsRef = useRef(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("rankly_user");
@@ -31,6 +30,45 @@ export default function App() {
   useEffect(() => {
     if (screen === "home") fetchContests();
   }, [screen]);
+
+  // Live leaderboard: connect while on the contest screen, reconnect if the socket drops.
+  useEffect(() => {
+    if (screen !== "contest" || !activeContest) return;
+    let ws;
+    let retryTimer;
+    let delay = 1000;
+    let stopped = false;
+
+    const loadLeaderboard = async () => {
+      try {
+        const res = await fetch(`${API}/contests/${activeContest.id}/leaderboard`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (!stopped) setLeaderboard(data);
+      } catch { showMessage("Failed to load leaderboard", "error"); }
+    };
+
+    const connect = () => {
+      ws = new WebSocket(`${WS}/${activeContest.id}`);
+      ws.onopen = () => { delay = 1000; loadLeaderboard(); }; // catch up on missed updates
+      ws.onmessage = (e) => setLeaderboard(JSON.parse(e.data).topEntries);
+      ws.onclose = () => {
+        if (stopped) return;
+        retryTimer = setTimeout(connect, delay);
+        delay = Math.min(delay * 2, 30000);
+      };
+    };
+
+    loadLeaderboard();
+    connect();
+
+    // Runs on leaving the screen or logging out.
+    return () => {
+      stopped = true;
+      clearTimeout(retryTimer);
+      ws.close();
+    };
+  }, [screen, activeContest]);
 
   const showMessage = (text, type = "info") => {
     setMessage({ text, type });
@@ -78,21 +116,10 @@ export default function App() {
     setScreen("auth");
   };
 
-  const joinContest = async (contest) => {
+  const joinContest = (contest) => {
+    setLeaderboard([]);
     setActiveContest(contest);
     setScreen("contest");
-    try {
-      const res = await fetch(`${API}/contests/${contest.id}/leaderboard`);
-      setLeaderboard(await res.json());
-    } catch { showMessage("Failed to load leaderboard", "error"); }
-
-    if (wsRef.current) wsRef.current.close();
-    const ws = new WebSocket(`${WS}/${contest.id}`);
-    ws.onmessage = (e) => {
-      const update = JSON.parse(e.data);
-      setLeaderboard(update.topEntries);
-    };
-    wsRef.current = ws;
   };
 
   const submitScore = async () => {
@@ -146,7 +173,6 @@ export default function App() {
   const goHome = () => {
     setScreen("home");
     setLeaderboard([]);
-    wsRef.current?.close();
   };
 
   if (screen === "auth") return (

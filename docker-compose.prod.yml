@@ -1,0 +1,103 @@
+# Separate project name, so it never replaces your dev containers or data.
+name: rankly-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-env: &app-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USERNAME: ${DB_USERNAME:-admin}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+  REDIS_HOST: redis
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+  # Rankings are not rebuilt from Postgres yet, so keep them for 180 days.
+  LEADERBOARD_CACHE_TTL_HOURS: "4320"
+  JAVA_TOOL_OPTIONS: -Xms256m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
+
+x-app: &app
+  image: rankly-app:prod
+  restart: unless-stopped
+  mem_limit: 512m
+  environment: *app-env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 90s
+  logging: *logging
+
+services:
+  app1:
+    <<: *app
+    build: .
+
+  app2:
+    <<: *app
+    pull_policy: never   # reuses the image app1 builds
+
+  web:
+    build: ./frontend
+    image: rankly-web:prod
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - app1
+      - app2
+    logging: *logging
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: leaderboard
+      POSTGRES_USER: ${DB_USERNAME:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d leaderboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
