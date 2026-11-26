@@ -3,6 +3,7 @@ package com.leaderboard.service;
 import com.leaderboard.dto.LeaderboardEntry;
 import com.leaderboard.dto.LeaderboardUpdate;
 import com.leaderboard.model.Score;
+import com.leaderboard.model.User;
 import com.leaderboard.repository.ContestRepository;
 import com.leaderboard.repository.ScoreRepository;
 import com.leaderboard.repository.UserRepository;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuples;
 
 import java.time.Instant;
 import java.util.List;
@@ -37,18 +39,24 @@ public class ScoreService {
                     if (!"ACTIVE".equals(contest.getStatus())) {
                         return Mono.error(new IllegalStateException("Contest is not active"));
                     }
-                    return userRepository.findById(userUUID);
+                    // The contest start time is needed later for tie-breaking.
+                    return userRepository.findById(userUUID)
+                            .map(user -> Tuples.of(user, contest.getStartsAt()));
                 })
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("User not found: " + userId)))
-                .flatMap(user ->
-                        scoreRepository.upsertScore(userUUID, contestUUID, score)
+                .flatMap(found -> {
+                    User user = found.getT1();
+                    Instant contestStart = found.getT2();
+                    return scoreRepository.upsertScore(userUUID, contestUUID, score)
                                 .then(scoreRepository.findByUserIdAndContestId(userUUID, contestUUID))
                                 .flatMap(savedScore ->
                                         redisLeaderboard.updateScore(
                                                 contestId,
                                                 user.getId().toString(),
                                                 user.getUsername(),
-                                                savedScore.getScore()
+                                                savedScore.getScore(),
+                                                savedScore.getSubmittedAt(),
+                                                contestStart
                                         ).flatMap(wasUpdated -> {
                                             if (wasUpdated) {
                                                 return redisLeaderboard.getTopEntries(contestId, 10)
@@ -75,8 +83,8 @@ public class ScoreService {
                                                 );
                                             }
                                         })
-                                )
-                )
+                                );
+                })
                 .doOnSuccess(entry -> log.info("Score submitted: user={}, contest={}, rank={}",
                         userId, contestId, entry.getRank()))
                 .doOnError(e -> log.error("Score submission failed: {}", e.getMessage()));

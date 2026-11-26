@@ -6,12 +6,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.ReactiveZSetOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -26,32 +28,45 @@ public class RedisLeaderboardService {
     @Value("${leaderboard.max-entries:100}")
     private int maxEntries;
 
-    private static final String KEY_PREFIX = "leaderboard:";
+    // "v2": entries use the packed format below, which keys without it don't.
+    private static final String KEY_PREFIX = "leaderboard:v2:";
 
-    public Mono<Boolean> updateScore(String contestId, String userId, String username, long rawScore) {
+    // A Redis score is a double, which holds whole numbers exactly up to 2^53.
+    // The score needs 30 bits (max 1,000,000,000), leaving 23 bits for the time bonus.
+    private static final long TIME_SLOTS = 1L << 23; // 8,388,608 seconds, about 97 days
+
+    // Adds the member, or updates it only if the new value is bigger, then refreshes the expiry.
+    // Redis runs a script as a single atomic step. Returns 1 if the leaderboard changed.
+    private static final RedisScript<Long> SAVE_IF_BETTER = RedisScript.of("""
+            local changed = redis.call('ZADD', KEYS[1], 'GT', 'CH', ARGV[1], ARGV[2])
+            redis.call('EXPIRE', KEYS[1], ARGV[3])
+            return changed
+            """, Long.class);
+
+    /**
+     * Packs score and time into one whole number: a higher score always ranks first,
+     * and for equal scores the earlier submission ranks first.
+     */
+    static long encode(long score, Instant submittedAt, Instant contestStart) {
+        long elapsed = Duration.between(contestStart, submittedAt).getSeconds();
+        long clamped = Math.max(0, Math.min(elapsed, TIME_SLOTS - 1));
+        return score * TIME_SLOTS + (TIME_SLOTS - 1 - clamped);
+    }
+
+    static long decodeScore(double encoded) {
+        return (long) encoded / TIME_SLOTS;
+    }
+
+    public Mono<Boolean> updateScore(String contestId, String userId, String username,
+                                     long rawScore, Instant submittedAt, Instant contestStart) {
         String key = KEY_PREFIX + contestId;
         String member = userId + ":" + username;
+        String encoded = Long.toString(encode(rawScore, submittedAt, contestStart));
+        String ttlSeconds = Long.toString(Duration.ofHours(cacheTtlHours).toSeconds());
 
-        double encodedScore = rawScore + (1.0 / (Instant.now().toEpochMilli() % 1000000));
-
-        ReactiveZSetOperations<String, String> zsetOps = redisTemplate.opsForZSet();
-
-        return zsetOps.score(key, member)
-                .defaultIfEmpty(Double.NEGATIVE_INFINITY)
-                .flatMap(existingEncoded -> {
-                    double existingRawScore = existingEncoded == Double.NEGATIVE_INFINITY
-                            ? Double.NEGATIVE_INFINITY
-                            : Math.floor(existingEncoded);
-
-                    if (rawScore <= existingRawScore) {
-                        log.debug("Score {} not higher than existing {} for user {}", rawScore, existingRawScore, userId);
-                        return Mono.just(false);
-                    }
-
-                    return zsetOps.add(key, member, encodedScore)
-                            .then(redisTemplate.expire(key, Duration.ofHours(cacheTtlHours)))
-                            .thenReturn(true);
-                });
+        return redisTemplate.execute(SAVE_IF_BETTER, List.of(key), List.of(encoded, member, ttlSeconds))
+                .next()
+                .map(changed -> changed > 0);
     }
 
     public Flux<LeaderboardEntry> getTopEntries(String contestId, int limit) {
@@ -63,9 +78,7 @@ public class RedisLeaderboardService {
                 .index()
                 .map(indexedEntry -> {
                     String member = indexedEntry.getT2().getValue();
-                    double encodedScore = indexedEntry.getT2().getScore();
-
-                    long rawScore = (long) encodedScore;
+                    long rawScore = decodeScore(indexedEntry.getT2().getScore());
 
                     String[] parts = member.split(":", 2);
                     String userId = parts[0];
@@ -91,8 +104,7 @@ public class RedisLeaderboardService {
                 zsetOps.score(key, member).defaultIfEmpty(0.0)
         ).map(tuple -> {
             long rank = tuple.getT1();
-            double encodedScore = tuple.getT2();
-            long rawScore = (long) encodedScore;
+            long rawScore = decodeScore(tuple.getT2());
 
             return LeaderboardEntry.builder()
                     .rank(rank == -1 ? -1 : rank + 1)
