@@ -69,7 +69,6 @@ public class ContestController {
                                             .eventType("CONTEST_ENDED")
                                             .build();
                                     broadcastService.broadcast(contestId, finalUpdate);
-                                    broadcastService.closeSink(contestId);
                                 })
                                 .thenReturn(contest)
                 );
