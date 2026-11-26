@@ -1,7 +1,9 @@
 package com.leaderboard.dto;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,6 +29,6 @@ public class Requests {
 
     @Data
     public static class SubmitScore {
-        @NotNull public Long score;
+        @NotNull @PositiveOrZero @Max(1_000_000_000) public Long score;
     }
 }
